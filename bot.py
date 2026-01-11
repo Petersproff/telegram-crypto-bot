@@ -30,9 +30,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    invoice = create_invoice(10, "Ebook Purchase")
+    pay_url = invoice.get("invoice_url")
+
+    if not pay_url:
+        await update.message.reply_text("Payment system error. Try again later.")
+        return
+
     await update.message.reply_text(
-        "🛒 Product:\n📘 Ebook – 10 USDT\nCrypto payment coming next."
+        f"💳 Pay with crypto (USDT):\n{pay_url}\n\n"
+        "✅ Delivery is automatic after payment."
     )
+
 
 def main():
     if not BOT_TOKEN:
