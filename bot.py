@@ -1,8 +1,12 @@
 import os
 import requests
 import uuid
+import hmac
+import hashlib
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from flask import Flask, request, abort
+
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 NOWPAY_API_KEY = os.getenv("NOWPAY_API_KEY")
@@ -24,6 +28,42 @@ def create_invoice(amount, description):
     return response.json()
 
 
+
+from flask import Flask, request, abort
+
+app_web = Flask(__name__)
+
+NOWPAY_IPN_SECRET = os.getenv("NOWPAY_IPN_SECRET")
+
+@app_web.route("/ipn", methods=["POST"])
+def ipn():
+    received_sig = request.headers.get("x-nowpayments-sig")
+    payload = request.data
+
+    if not received_sig:
+        abort(400)
+
+    expected_sig = hmac.new(
+        NOWPAY_IPN_SECRET.encode(),
+        payload,
+        hashlib.sha512
+    ).hexdigest()
+
+    if not hmac.compare_digest(received_sig, expected_sig):
+        abort(403)
+
+    data = request.json
+
+    if data.get("payment_status") == "finished":
+        order_id = data.get("order_id")
+        print("✅ Payment confirmed:", order_id)
+        # TODO: deliver product here
+
+    return "OK", 200
+
+
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🤖 Bot is live!\nUse /shop to buy."
@@ -42,15 +82,18 @@ async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "✅ Delivery is automatic after payment."
     )
 
-
 def main():
     if not BOT_TOKEN:
         raise RuntimeError("BOT_TOKEN is not set")
 
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("shop", shop))
-    app.run_polling()
+    telegram_app = ApplicationBuilder().token(BOT_TOKEN).build()
+    telegram_app.add_handler(CommandHandler("start", start))
+    telegram_app.add_handler(CommandHandler("shop", shop))
 
-if __name__ == "__main__":
-    main()
+    # Start Flask IPN server in background
+    threading.Thread(
+        target=lambda: app_web.run(host="0.0.0.0", port=8080),
+        daemon=True
+    ).start()
+
+    telegram_app.run_polling()
