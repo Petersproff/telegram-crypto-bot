@@ -90,7 +90,6 @@ def main():
     telegram_app.add_handler(CommandHandler("start", start))
     telegram_app.add_handler(CommandHandler("shop", shop))
 
-    # Start Flask IPN server in background
     threading.Thread(
         target=lambda: app_web.run(host="0.0.0.0", port=8080),
         daemon=True
