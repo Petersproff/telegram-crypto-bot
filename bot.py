@@ -16,7 +16,7 @@ def create_invoice(amount, description):
     payload = {
         "price_amount": amount,
         "price_currency": "usd",
-        "pay_currency": "usdt",
+        "pay_currency": "btc",
         "order_id": str(uuid.uuid4()),
         "order_description": description
     }
