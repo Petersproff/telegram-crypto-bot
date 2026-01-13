@@ -40,6 +40,10 @@ app_web = Flask(__name__)
 NOWPAY_IPN_SECRET = os.getenv("NOWPAY_IPN_SECRET")
 
 @app_web.route("/ipn", methods=["POST"])
+
+
+
+@app_web.route("/ipn", methods=["POST"])
 def ipn():
     received_sig = request.headers.get("x-nowpayments-sig")
     payload = request.data
@@ -58,12 +62,25 @@ def ipn():
 
     data = request.json
 
+    # ✅ AUTO DELIVERY HERE
     if data.get("payment_status") == "finished":
         order_id = data.get("order_id")
-        print("✅ Payment confirmed:", order_id)
-        # TODO: deliver product here
+        user_id = ORDERS.get(order_id)
+
+        if user_id and telegram_app:
+            telegram_app.bot.send_message(
+                chat_id=user_id,
+                text=(
+                    "✅ Payment received!\n\n"
+                    "📘 Here is your ebook:\n"
+                    "https://your-download-link.com"
+                )
+            )
 
     return "OK", 200
+
+
+
 
 
 
