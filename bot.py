@@ -109,19 +109,22 @@ async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "✅ You will receive your product automatically after payment."
     )
 
-
 def main():
-    if not BOT_TOKEN:
-        raise RuntimeError("BOT_TOKEN is not set")
+    global telegram_app
 
     telegram_app = ApplicationBuilder().token(BOT_TOKEN).build()
+
     telegram_app.add_handler(CommandHandler("start", start))
     telegram_app.add_handler(CommandHandler("shop", shop))
 
+    # Start Flask IPN server in background
+    import threading
     threading.Thread(
         target=lambda: app_web.run(host="0.0.0.0", port=8080),
         daemon=True
     ).start()
 
+    print("🤖 Bot started and polling...")
     telegram_app.run_polling()
+
     if __name__ == "__main__":    main()
