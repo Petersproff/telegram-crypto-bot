@@ -8,6 +8,10 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from flask import Flask, request, abort
 
 
+ORDERS = {}  # order_id -> telegram_user_id
+telegram_app = None
+
+
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 NOWPAY_API_KEY = os.getenv("NOWPAY_API_KEY")
 
