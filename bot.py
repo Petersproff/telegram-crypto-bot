@@ -127,4 +127,5 @@ def main():
     print("🤖 Bot started and polling...")
     telegram_app.run_polling()
 
-    if __name__ == "__main__":    main()
+if __name__== "__main__":
+        main()
