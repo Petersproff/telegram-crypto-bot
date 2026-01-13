@@ -76,15 +76,22 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     invoice = create_invoice(10, "Ebook Purchase")
     pay_url = invoice.get("invoice_url")
+    order_id = invoice.get("order_id")
 
-    if not pay_url:
-        await update.message.reply_text("Payment system error. Please try again later.")
+    if not pay_url or not order_id:
+        await update.message.reply_text(
+            "❌ Payment system error. Please try again later."
+        )
         return
 
+    # Save order -> user mapping
+    ORDERS[order_id] = update.effective_user.id
+
     await update.message.reply_text(
-        f"💳 Pay with crypto (BTC):\n{pay_url}\n\n"
-        "✅ Delivery is automatic after payment."
+        f"💳 Pay with crypto:\n{pay_url}\n\n"
+        "✅ You will receive your product automatically after payment."
     )
+
 
 def main():
     if not BOT_TOKEN:
