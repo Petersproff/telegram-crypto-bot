@@ -84,25 +84,31 @@ def ipn():
     data = request.json
 
     # ✅ AUTO DELIVERY HERE
-    if data.get("payment_status") == "finished":
-        order_id = data.get("order_id")
-        user_id = ORDERS.get(order_id)
+if data.get("payment_status") == "finished":
+    order_id = data.get("order_id")
 
-        if user_id and telegram_app:
-            telegram_app.bot.send_message(
-                chat_id=user_id,
-                text=(
-                    "✅ Payment received!\n\n"
-                    "📘 Here is your ebook:\n"
-                    "https://your-download-link.com"
-                )
+    row = db.execute(
+        "SELECT user_id, product FROM orders WHERE order_id=?",
+        (order_id,)
+    ).fetchone()
+
+    if row:
+        user_id, product = row
+
+        telegram_app.bot.send_message(
+            chat_id=user_id,
+            text=(
+                "✅ Payment received!\n\n"
+                "📘 Your ebook download:\n"
+                "https://your-download-link.com"
             )
+        )
 
-    return "OK", 200
-
-
-
-
+        db.execute(
+            "UPDATE orders SET status='delivered' WHERE order_id=?",
+            (order_id,)
+        )
+        db.commit()
 
 
 
