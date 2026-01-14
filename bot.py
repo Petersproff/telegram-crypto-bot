@@ -12,8 +12,6 @@ import sqlite3
 
 ORDERS = {}  # order_id -> telegram_user_id
 telegram_app = None
-order_id  →  Telegram user
-
 
 
 def init_db():
