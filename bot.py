@@ -141,6 +141,35 @@ db.commit()
         "✅ You will receive your product automatically after payment."
     )
 
+async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("Usage: /buy ebook")
+        return
+
+    product = context.args[0]
+
+    if product not in PRODUCTS:
+        await update.message.reply_text("❌ Invalid product")
+        return
+
+    price = PRODUCTS[product]["price"]
+
+    invoice = create_invoice(price, product)
+    order_id = invoice["order_id"]
+
+    ORDERS[order_id] = update.effective_user.id
+
+    db.execute(
+        "INSERT INTO orders VALUES (?, ?, ?, ?)",
+        (order_id, update.effective_user.id, product, "pending")
+    )
+    db.commit()
+
+    await update.message.reply_text(
+        f"💳 Pay here:\n{invoice['invoice_url']}"
+    )
+
+
 def main():
     global telegram_app
 
@@ -148,6 +177,7 @@ def main():
 
     telegram_app.add_handler(CommandHandler("start", start))
     telegram_app.add_handler(CommandHandler("shop", shop))
+telegram_app.add_handler(CommandHandler("buy", buy))
 
     # Start Flask IPN server in background
     import threading
