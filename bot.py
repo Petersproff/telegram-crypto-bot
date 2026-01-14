@@ -6,10 +6,31 @@ import hashlib
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from flask import Flask, request, abort
+import sqlite3
+
 
 
 ORDERS = {}  # order_id -> telegram_user_id
 telegram_app = None
+order_id  →  Telegram user
+
+
+
+def init_db():
+    conn = sqlite3.connect("orders.db", check_same_thread=False)
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS orders (
+            order_id TEXT PRIMARY KEY,
+            user_id INTEGER,
+            product TEXT,
+            status TEXT
+        )
+    """)
+    conn.commit()
+    return conn
+
+db = init_db()
 
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -103,6 +124,13 @@ async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Save order -> user mapping
     ORDERS[order_id] = update.effective_user.id
+
+    order_id = invoice["order_id"]
+db.execute(
+    "INSERT INTO orders VALUES (?, ?, ?, ?)",
+    (order_id, update.effective_user.id, "ebook", "pending")
+)
+db.commit()
 
     await update.message.reply_text(
         f"💳 Pay with crypto:\n{pay_url}\n\n"
