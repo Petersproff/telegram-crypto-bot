@@ -124,11 +124,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "🛒 Available products:\n\n"
-        "📘 Ebook — $10\n\n"
-        "Use /buy ebook"
-    )
+    text = "🛒 Available products:\n\n"
+    for name, p in PRODUCTS.items():
+        text += f"• {name.title()} — ${p['price']}\n"
+    text += "\nUse /buy <product> to purchase, e.g., /buy ebook"
+    await update.message.reply_text(text)
+
 
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
