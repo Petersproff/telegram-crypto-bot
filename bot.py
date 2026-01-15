@@ -98,6 +98,7 @@ async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "✅ You will receive your product automatically after payment."
     )
     
+
     
 @app_web.route("/ipn", methods=["POST"])
 def ipn():
