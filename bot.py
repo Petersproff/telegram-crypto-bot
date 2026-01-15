@@ -37,8 +37,11 @@ db = init_db()
 # ===================== PRODUCTS =====================
 
 PRODUCTS = {
-    "ebook": {"price": 10}
+    "ebook": {"price": 10, "download": "https://your-download-link.com/ebook.pdf"},
+    "course": {"price": 50, "download": "https://your-download-link.com/course.zip"},
+    "video": {"price": 25, "download": "https://your-download-link.com/video.mp4"}
 }
+
 
 # ===================== TELEGRAM APP =====================
 
