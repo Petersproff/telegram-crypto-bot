@@ -61,7 +61,12 @@ NOWPAY_IPN_SECRET = os.getenv("NOWPAY_IPN_SECRET")
 
 
 
-@app_web.route("/ipn", methods=["POST"])
+
+
+
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await@app_web.route("/ipn", methods=["POST"])
 def ipn():
     received_sig = request.headers.get("x-nowpayments-sig")
     payload = request.data
@@ -78,39 +83,38 @@ def ipn():
     if not hmac.compare_digest(received_sig, expected_sig):
         abort(403)
 
+    # ✅ THIS LINE WAS MISSING
     data = request.json
 
-    # ✅ AUTO DELIVERY HERE
-if data.get("payment_status") == "finished":
-    order_id = data.get("order_id")
+    if data.get("payment_status") == "finished":
+        order_id = data.get("order_id")
 
-    row = db.execute(
-        "SELECT user_id, product FROM orders WHERE order_id=?",
-        (order_id,)
-    ).fetchone()
-
-    if row:
-        user_id, product = row
-
-        telegram_app.bot.send_message(
-            chat_id=user_id,
-            text=(
-                "✅ Payment received!\n\n"
-                "📘 Your ebook download:\n"
-                "https://your-download-link.com"
-            )
-        )
-
-        db.execute(
-            "UPDATE orders SET status='delivered' WHERE order_id=?",
+        row = db.execute(
+            "SELECT user_id FROM orders WHERE order_id=?",
             (order_id,)
-        )
-        db.commit()
+        ).fetchone()
 
+        if row:
+            user_id = row[0]
 
+            telegram_app.bot.send_message(
+                chat_id=user_id,
+                text=(
+                    "✅ Payment received!\n\n"
+                    "📘 Your ebook download:\n"
+                    "https://your-download-link.com"
+                )
+            )
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
+            db.execute(
+                "UPDATE orders SET status='delivered' WHERE order_id=?",
+                (order_id,)
+            )
+            db.commit()
+
+    return "OK", 200
+    
+    update.message.reply_text(
         "🤖 Bot is live!\nUse /shop to buy."
     )
 
