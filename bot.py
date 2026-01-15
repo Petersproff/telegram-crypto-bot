@@ -7,6 +7,7 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from flask import Flask, request, abort
 import sqlite3
+import threading
 
 
 
@@ -184,7 +185,7 @@ def main():
 telegram_app.add_handler(CommandHandler("buy", buy))
 
     # Start Flask IPN server in background
-    import threading
+    
     threading.Thread(
         target=lambda: app_web.run(host="0.0.0.0", port=8080),
         daemon=True
