@@ -116,6 +116,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     invoice = create_invoice(10, "Ebook Purchase")
+
     pay_url = invoice.get("invoice_url")
     order_id = invoice.get("order_id")
 
@@ -125,10 +126,8 @@ async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Save order -> user mapping (memory)
     ORDERS[order_id] = update.effective_user.id
 
-    # Save order to database
     db.execute(
         "INSERT INTO orders VALUES (?, ?, ?, ?)",
         (order_id, update.effective_user.id, "ebook", "pending")
@@ -182,10 +181,9 @@ def main():
 
     telegram_app.add_handler(CommandHandler("start", start))
     telegram_app.add_handler(CommandHandler("shop", shop))
-telegram_app.add_handler(CommandHandler("buy", buy))
+    telegram_app.add_handler(CommandHandler("buy", buy))
 
     # Start Flask IPN server in background
-    
     threading.Thread(
         target=lambda: app_web.run(host="0.0.0.0", port=8080),
         daemon=True
