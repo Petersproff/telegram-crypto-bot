@@ -97,9 +97,9 @@ async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"💳 Pay with crypto:\n{pay_url}\n\n"
         "✅ You will receive your product automatically after payment."
     )
-
-            
- @app_web.route("/ipn", methods=["POST"])
+    
+    
+@app_web.route("/ipn", methods=["POST"])
 def ipn():
     received_sig = request.headers.get("x-nowpayments-sig")
     payload = request.data
