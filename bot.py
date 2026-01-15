@@ -99,7 +99,6 @@ async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     
 
-    
 @app_web.route("/ipn", methods=["POST"])
 def ipn():
     received_sig = request.headers.get("x-nowpayments-sig")
@@ -117,7 +116,7 @@ def ipn():
     if not hmac.compare_digest(received_sig, expected_sig):
         abort(403)
 
-    data = request.json
+    data = request.json  # ✅ data is defined HERE
 
     if data and data.get("payment_status") == "finished":
         order_id = data.get("order_id")
@@ -146,6 +145,7 @@ def ipn():
             db.commit()
 
     return "OK", 200
+
            "❌ Payment system error. Please try again later."
         )
         return
