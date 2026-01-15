@@ -72,6 +72,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🤖 Bot is live!\nUse /shop to buy."
     )
 
+
+
+
 async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     invoice = create_invoice(10, "Ebook Purchase")
 
@@ -80,6 +83,22 @@ async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not pay_url or not order_id:
         await update.message.reply_text(
+            "❌ Payment system error. Please try again later."
+        )
+        return
+
+    db.execute(
+        "INSERT INTO orders VALUES (?, ?, ?, ?)",
+        (order_id, update.effective_user.id, "ebook", "pending")
+    )
+    db.commit()
+
+    await update.message.reply_text(
+        f"💳 Pay with crypto:\n{pay_url}\n\n"
+        "✅ You will receive your product automatically after payment."
+    )
+
+            
  @app_web.route("/ipn", methods=["POST"])
 def ipn():
     received_sig = request.headers.get("x-nowpayments-sig")
