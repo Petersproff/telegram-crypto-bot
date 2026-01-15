@@ -66,7 +66,21 @@ NOWPAY_IPN_SECRET = os.getenv("NOWPAY_IPN_SECRET")
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await@app_web.route("/ipn", methods=["POST"])
+    
+    
+    update.message.reply_text(
+        "🤖 Bot is live!\nUse /shop to buy."
+    )
+
+async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    invoice = create_invoice(10, "Ebook Purchase")
+
+    pay_url = invoice.get("invoice_url")
+    order_id = invoice.get("order_id")
+
+    if not pay_url or not order_id:
+        await update.message.reply_text(
+ @app_web.route("/ipn", methods=["POST"])
 def ipn():
     received_sig = request.headers.get("x-nowpayments-sig")
     payload = request.data
@@ -83,10 +97,9 @@ def ipn():
     if not hmac.compare_digest(received_sig, expected_sig):
         abort(403)
 
-    # ✅ THIS LINE WAS MISSING
     data = request.json
 
-    if data.get("payment_status") == "finished":
+    if data and data.get("payment_status") == "finished":
         order_id = data.get("order_id")
 
         row = db.execute(
@@ -113,20 +126,7 @@ def ipn():
             db.commit()
 
     return "OK", 200
-    
-    update.message.reply_text(
-        "🤖 Bot is live!\nUse /shop to buy."
-    )
-
-async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    invoice = create_invoice(10, "Ebook Purchase")
-
-    pay_url = invoice.get("invoice_url")
-    order_id = invoice.get("order_id")
-
-    if not pay_url or not order_id:
-        await update.message.reply_text(
-            "❌ Payment system error. Please try again later."
+           "❌ Payment system error. Please try again later."
         )
         return
 
