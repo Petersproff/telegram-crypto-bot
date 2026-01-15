@@ -52,8 +52,6 @@ def create_invoice(amount, description):
 
 
 
-from flask import Flask, request, abort
-
 app_web = Flask(__name__)
 
 NOWPAY_IPN_SECRET = os.getenv("NOWPAY_IPN_SECRET")
@@ -126,15 +124,21 @@ async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Save order -> user mapping
+    # Save order -> user mapping (memory)
     ORDERS[order_id] = update.effective_user.id
 
-    order_id = invoice["order_id"]
-db.execute(
-    "INSERT INTO orders VALUES (?, ?, ?, ?)",
-    (order_id, update.effective_user.id, "ebook", "pending")
-)
-db.commit()
+    # Save order to database
+    db.execute(
+        "INSERT INTO orders VALUES (?, ?, ?, ?)",
+        (order_id, update.effective_user.id, "ebook", "pending")
+    )
+    db.commit()
+
+    await update.message.reply_text(
+        f"💳 Pay with crypto:\n{pay_url}\n\n"
+        "✅ You will receive your product automatically after payment."
+    )
+
 
     await update.message.reply_text(
         f"💳 Pay with crypto:\n{pay_url}\n\n"
