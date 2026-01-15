@@ -3,17 +3,20 @@ import requests
 import uuid
 import hmac
 import hashlib
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-from flask import Flask, request, abort
 import sqlite3
 import threading
 
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from flask import Flask, request, abort
 
+# ===================== CONFIG =====================
 
-ORDERS = {}  # order_id -> telegram_user_id
-telegram_app = None
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+NOWPAY_API_KEY = os.getenv("NOWPAY_API_KEY")
+NOWPAY_IPN_SECRET = os.getenv("NOWPAY_IPN_SECRET")
 
+# ===================== DATABASE =====================
 
 def init_db():
     conn = sqlite3.connect("orders.db", check_same_thread=False)
@@ -31,9 +34,17 @@ def init_db():
 
 db = init_db()
 
+# ===================== PRODUCTS =====================
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-NOWPAY_API_KEY = os.getenv("NOWPAY_API_KEY")
+PRODUCTS = {
+    "ebook": {"price": 10}
+}
+
+# ===================== TELEGRAM APP =====================
+
+telegram_app = None
+
+# ===================== NOWPAYMENTS =====================
 
 def create_invoice(amount, description):
     url = "https://api.nowpayments.io/v1/invoice"
@@ -51,53 +62,9 @@ def create_invoice(amount, description):
     response = requests.post(url, json=payload, headers=headers)
     return response.json()
 
-
+# ===================== FLASK IPN =====================
 
 app_web = Flask(__name__)
-
-NOWPAY_IPN_SECRET = os.getenv("NOWPAY_IPN_SECRET")
-
-@app_web.route("/ipn", methods=["POST"])
-
-
-
-
-
-
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    
-    
-    update.message.reply_text(
-        "🤖 Bot is live!\nUse /shop to buy."
-    )
-
-
-
-
-async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    invoice = create_invoice(10, "Ebook Purchase")
-
-    pay_url = invoice.get("invoice_url")
-    order_id = invoice.get("order_id")
-
-    if not pay_url or not order_id:
-        await update.message.reply_text(
-            "❌ Payment system error. Please try again later."
-        )
-        return
-
-    db.execute(
-        "INSERT INTO orders VALUES (?, ?, ?, ?)",
-        (order_id, update.effective_user.id, "ebook", "pending")
-    )
-    db.commit()
-
-    await update.message.reply_text(
-        f"💳 Pay with crypto:\n{pay_url}\n\n"
-        "✅ You will receive your product automatically after payment."
-    )
-    
 
 @app_web.route("/ipn", methods=["POST"])
 def ipn():
@@ -116,7 +83,7 @@ def ipn():
     if not hmac.compare_digest(received_sig, expected_sig):
         abort(403)
 
-    data = request.json  # ✅ data is defined HERE
+    data = request.json
 
     if data and data.get("payment_status") == "finished":
         order_id = data.get("order_id")
@@ -146,27 +113,18 @@ def ipn():
 
     return "OK", 200
 
-           "❌ Payment system error. Please try again later."
-        )
-        return
+# ===================== BOT COMMANDS =====================
 
-    ORDERS[order_id] = update.effective_user.id
-
-    db.execute(
-        "INSERT INTO orders VALUES (?, ?, ?, ?)",
-        (order_id, update.effective_user.id, "ebook", "pending")
-    )
-    db.commit()
-
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        f"💳 Pay with crypto:\n{pay_url}\n\n"
-        "✅ You will receive your product automatically after payment."
+        "🤖 Bot is live!\nUse /shop to buy."
     )
 
-
+async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        f"💳 Pay with crypto:\n{pay_url}\n\n"
-        "✅ You will receive your product automatically after payment."
+        "🛒 Available products:\n\n"
+        "📘 Ebook — $10\n\n"
+        "Use /buy ebook"
     )
 
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -181,11 +139,16 @@ async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     price = PRODUCTS[product]["price"]
-
     invoice = create_invoice(price, product)
-    order_id = invoice["order_id"]
 
-    ORDERS[order_id] = update.effective_user.id
+    pay_url = invoice.get("invoice_url")
+    order_id = invoice.get("order_id")
+
+    if not pay_url or not order_id:
+        await update.message.reply_text(
+            "❌ Payment system error. Please try again later."
+        )
+        return
 
     db.execute(
         "INSERT INTO orders VALUES (?, ?, ?, ?)",
@@ -194,9 +157,11 @@ async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     db.commit()
 
     await update.message.reply_text(
-        f"💳 Pay here:\n{invoice['invoice_url']}"
+        f"💳 Pay with crypto:\n{pay_url}\n\n"
+        "✅ You will receive your product automatically after payment."
     )
 
+# ===================== MAIN =====================
 
 def main():
     global telegram_app
@@ -216,5 +181,5 @@ def main():
     print("🤖 Bot started and polling...")
     telegram_app.run_polling()
 
-if __name__== "__main__":
-        main()
+if __name__ == "__main__":
+    main()
