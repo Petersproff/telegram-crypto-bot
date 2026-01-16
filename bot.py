@@ -42,7 +42,6 @@ PRODUCTS = {
     "video": {"price": 25, "download": "https://your-download-link.com/video.mp4"}
 }
 
-
 # ===================== TELEGRAM APP =====================
 
 telegram_app = None
@@ -92,19 +91,20 @@ def ipn():
         order_id = data.get("order_id")
 
         row = db.execute(
-            "SELECT user_id FROM orders WHERE order_id=?",
+            "SELECT user_id, product FROM orders WHERE order_id=?",
             (order_id,)
         ).fetchone()
 
         if row:
-            user_id = row[0]
+            user_id, product_name = row
+            download_link = PRODUCTS[product_name]["download"]
 
             telegram_app.bot.send_message(
                 chat_id=user_id,
                 text=(
-                    "✅ Payment received!\n\n"
-                    "📘 Your ebook download:\n"
-                    "https://your-download-link.com"
+                    f"✅ Payment received!\n\n"
+                    f"📘 Your {product_name} download:\n"
+                    f"{download_link}"
                 )
             )
 
@@ -120,7 +120,7 @@ def ipn():
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "🤖 Bot is live!\nUse /shop to buy."
+        "🤖 Bot is live!\nUse /shop to see available products."
     )
 
 async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -129,7 +129,6 @@ async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text += f"• {name.title()} — ${p['price']}\n"
     text += "\nUse /buy <product> to purchase, e.g., /buy ebook"
     await update.message.reply_text(text)
-
 
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
@@ -165,7 +164,6 @@ async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "✅ You will receive your product automatically after payment."
     )
 
-
 # ===================== MAIN =====================
 
 def main():
@@ -188,3 +186,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+ 
