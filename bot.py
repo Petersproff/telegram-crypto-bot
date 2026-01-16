@@ -5,9 +5,11 @@ import hmac
 import hashlib
 import sqlite3
 import threading
+import asyncio
 
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telegram.constants import ChatAction
 from flask import Flask, request, abort
 
 # ===================== CONFIG =====================
@@ -15,6 +17,7 @@ from flask import Flask, request, abort
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 NOWPAY_API_KEY = os.getenv("NOWPAY_API_KEY")
 NOWPAY_IPN_SECRET = os.getenv("NOWPAY_IPN_SECRET")
+ADMINS = [123456789]  # <-- Replace with your Telegram user ID(s)
 
 # ===================== DATABASE =====================
 
@@ -37,9 +40,26 @@ db = init_db()
 # ===================== PRODUCTS =====================
 
 PRODUCTS = {
-    "ebook": {"price": 10, "download": "https://your-download-link.com/ebook.pdf"},
-    "course": {"price": 50, "download": "https://your-download-link.com/course.zip"},
-    "video": {"price": 25, "download": "https://your-download-link.com/video.mp4"}
+    "ebook": {
+        "price": 10,
+        "downloads": [
+            "https://your-download-link.com/ebook.pdf",
+            "https://your-download-link.com/ebook-supplement.pdf"
+        ]
+    },
+    "course": {
+        "price": 50,
+        "downloads": [
+            "https://your-download-link.com/course.zip"
+        ]
+    },
+    "video": {
+        "price": 25,
+        "downloads": [
+            "https://your-download-link.com/video.mp4",
+            "https://your-download-link.com/video-extra.mp4"
+        ]
+    }
 }
 
 # ===================== TELEGRAM APP =====================
@@ -97,14 +117,15 @@ def ipn():
 
         if row:
             user_id, product_name = row
-            download_link = PRODUCTS[product_name]["download"]
+            download_links = PRODUCTS[product_name]["downloads"]
+            links_text = "\n".join([f"🔗 {link}" for link in download_links])
 
             telegram_app.bot.send_message(
                 chat_id=user_id,
                 text=(
                     f"✅ Payment received!\n\n"
-                    f"📘 Your {product_name} download:\n"
-                    f"{download_link}"
+                    f"📘 Your {product_name} downloads:\n"
+                    f"{links_text}"
                 )
             )
 
@@ -116,19 +137,41 @@ def ipn():
 
     return "OK", 200
 
+# ===================== ADMIN DECORATOR =====================
+
+def admin_only(func):
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if update.effective_user.id not in ADMINS:
+            await update.message.reply_text("❌ You are not authorized to use this command.")
+            return
+        await func(update, context)
+    return wrapper
+
 # ===================== BOT COMMANDS =====================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "🤖 Bot is live!\nUse /shop to see available products."
+    await update.chat.send_action(ChatAction.TYPING)
+    await asyncio.sleep(1)
+    await update.message.reply_animation(
+        animation="https://media.giphy.com/media/3o7aD2saalBwwftBIY/giphy.gif",
+        caption="🤖 *Bot is live!*\nUse /shop to see available products.",
+        parse_mode="Markdown"
     )
 
 async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = "🛒 Available products:\n\n"
+    await update.chat.send_action(ChatAction.TYPING)
+    await asyncio.sleep(1)
+
+    text = "🛒 *Available Products:*\n\n"
     for name, p in PRODUCTS.items():
-        text += f"• {name.title()} — ${p['price']}\n"
-    text += "\nUse /buy <product> to purchase, e.g., /buy ebook"
-    await update.message.reply_text(text)
+        text += f"• *{name.title()}* — 💵 ${p['price']}\n"
+    text += "\nUse /buy `<product>` to purchase, e.g., /buy `ebook`"
+
+    await update.message.reply_animation(
+        animation="https://media.giphy.com/media/3o7aD2saalBwwftBIY/giphy.gif",
+        caption=text,
+        parse_mode="Markdown"
+    )
 
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
@@ -136,7 +179,6 @@ async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     product = context.args[0].lower()
-
     if product not in PRODUCTS:
         await update.message.reply_text("❌ Invalid product. Use /shop to see available products.")
         return
@@ -148,9 +190,7 @@ async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     order_id = invoice.get("order_id")
 
     if not pay_url or not order_id:
-        await update.message.reply_text(
-            "❌ Payment system error. Please try again later."
-        )
+        await update.message.reply_text("❌ Payment system error. Please try again later.")
         return
 
     db.execute(
@@ -164,6 +204,33 @@ async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "✅ You will receive your product automatically after payment."
     )
 
+# ===================== ADMIN COMMANDS =====================
+
+@admin_only
+async def orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    rows = db.execute("SELECT order_id, user_id, product, status FROM orders").fetchall()
+    if not rows:
+        await update.message.reply_text("No orders yet.")
+        return
+
+    text = "📋 Orders:\n\n"
+    for order_id, user_id, product, status in rows:
+        text += f"• {order_id} — User: {user_id} — Product: {product} — Status: {status}\n"
+    await update.message.reply_text(text)
+
+@admin_only
+async def addproduct(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if len(context.args) < 3:
+        await update.message.reply_text("Usage: /addproduct name price link1,link2,...")
+        return
+
+    name = context.args[0].lower()
+    price = float(context.args[1])
+    links = " ".join(context.args[2:]).split(",")
+
+    PRODUCTS[name] = {"price": price, "downloads": links}
+    await update.message.reply_text(f"✅ Product {name} added with {len(links)} files.")
+
 # ===================== MAIN =====================
 
 def main():
@@ -174,8 +241,9 @@ def main():
     telegram_app.add_handler(CommandHandler("start", start))
     telegram_app.add_handler(CommandHandler("shop", shop))
     telegram_app.add_handler(CommandHandler("buy", buy))
+    telegram_app.add_handler(CommandHandler("orders", orders))
+    telegram_app.add_handler(CommandHandler("addproduct", addproduct))
 
-    # Start Flask IPN server in background
     threading.Thread(
         target=lambda: app_web.run(host="0.0.0.0", port=8080),
         daemon=True
@@ -186,4 +254,3 @@ def main():
 
 if __name__ == "__main__":
     main()
- 
