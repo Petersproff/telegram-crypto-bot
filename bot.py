@@ -150,7 +150,7 @@ def admin_only(func):
 # ===================== BOT COMMANDS =====================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.chat.send_action(ChatAction.TYPING)
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
     await asyncio.sleep(1)
     await update.message.reply_animation(
         animation="https://media.giphy.com/media/3o7aD2saalBwwftBIY/giphy.gif",
@@ -159,7 +159,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.chat.send_action(ChatAction.TYPING)
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
     await asyncio.sleep(1)
 
     text = "🛒 *Available Products:*\n\n"
@@ -244,6 +244,7 @@ def main():
     telegram_app.add_handler(CommandHandler("orders", orders))
     telegram_app.add_handler(CommandHandler("addproduct", addproduct))
 
+    # Start Flask IPN server in background
     threading.Thread(
         target=lambda: app_web.run(host="0.0.0.0", port=8080),
         daemon=True
