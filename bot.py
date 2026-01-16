@@ -133,13 +133,13 @@ async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
-        await update.message.reply_text("Usage: /buy ebook")
+        await update.message.reply_text("Usage: /buy <product>, e.g., /buy ebook")
         return
 
-    product = context.args[0]
+    product = context.args[0].lower()
 
     if product not in PRODUCTS:
-        await update.message.reply_text("❌ Invalid product")
+        await update.message.reply_text("❌ Invalid product. Use /shop to see available products.")
         return
 
     price = PRODUCTS[product]["price"]
@@ -164,6 +164,7 @@ async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"💳 Pay with crypto:\n{pay_url}\n\n"
         "✅ You will receive your product automatically after payment."
     )
+
 
 # ===================== MAIN =====================
 
