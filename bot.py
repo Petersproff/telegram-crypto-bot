@@ -4,10 +4,16 @@ import hmac
 import hashlib
 import sqlite3
 import threading
+import asyncio
 import requests
 
 from flask import Flask, request, abort
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    ChatAction,
+)
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -121,9 +127,11 @@ def ipn():
             telegram_app.bot.send_message(
                 chat_id=user_id,
                 text=(
-                    "✅ Payment confirmed!\n\n"
-                    f"🎁 Your download:\n{download}"
+                    "✅ *Payment Confirmed!*\n\n"
+                    "🎁 Your reward is ready:\n"
+                    f"{download}"
                 ),
+                parse_mode="Markdown",
             )
 
             db.execute(
@@ -135,47 +143,58 @@ def ipn():
     return "OK", 200
 
 # =========================
-# TELEGRAM UI
+# UI MENUS
 # =========================
 
 def main_menu():
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton("🛒 Shop", callback_data="shop"),
-            InlineKeyboardButton("🎁 Bonus", callback_data="bonus"),
+            InlineKeyboardButton("⛏ Earn", callback_data="earn"),
         ],
         [
+            InlineKeyboardButton("🎁 Bonus", callback_data="bonus"),
             InlineKeyboardButton("🏦 Bank", callback_data="bank"),
-            InlineKeyboardButton("⛏ Earn", callback_data="earn"),
         ],
     ])
 
 def shop_menu():
     return InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("📘 Ebook – $10", callback_data="buy_ebook"),
-        ],
-        [
-            InlineKeyboardButton("🎓 Course – $25", callback_data="buy_course"),
-        ],
-        [
-            InlineKeyboardButton("⬅ Back", callback_data="back"),
-        ],
+        [InlineKeyboardButton("📘 Ebook — $10", callback_data="buy_ebook")],
+        [InlineKeyboardButton("🎓 Course — $25", callback_data="buy_course")],
+        [InlineKeyboardButton("⬅ Back", callback_data="back")],
     ])
 
 # =========================
-# HANDLERS
+# ANIMATED START
 # =========================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+
+    await chat.send_action(ChatAction.TYPING)
+    await asyncio.sleep(1.2)
+    await update.message.reply_text("🔌 Connecting to *Gamemode*...", parse_mode="Markdown")
+
+    await chat.send_action(ChatAction.TYPING)
+    await asyncio.sleep(1.2)
+    await update.message.reply_text("🔐 Syncing wallet & stats...")
+
+    await chat.send_action(ChatAction.TYPING)
+    await asyncio.sleep(1.2)
     await update.message.reply_text(
-        "🎮 *CORNIO ARENA*\n\n"
-        "🏆 Rating: 1307\n"
-        "💰 Balance: $0.00\n\n"
-        "🔥 Choose your move:",
+        "🎮 *WELCOME TO GAMEMODE*\n\n"
+        "🏆 Rank: Challenger\n"
+        "💰 Balance: $0.00\n"
+        "📦 Inventory: Empty\n\n"
+        "🔥 Choose your next move:",
         reply_markup=main_menu(),
         parse_mode="Markdown",
     )
+
+# =========================
+# MENU HANDLER
+# =========================
 
 async def menu_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -183,27 +202,31 @@ async def menu_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if query.data == "shop":
         await query.edit_message_text(
-            "🛒 *Shop*\nSelect a product:",
+            "🛒 *Gamemode Shop*\nSelect an item:",
             reply_markup=shop_menu(),
             parse_mode="Markdown",
         )
 
     elif query.data == "back":
         await query.edit_message_text(
-            "🎮 Main Menu",
+            "🎮 *Gamemode Dashboard*",
             reply_markup=main_menu(),
+            parse_mode="Markdown",
         )
 
     elif query.data.startswith("buy_"):
         product_key = query.data.replace("buy_", "")
         product = PRODUCTS[product_key]
 
+        await query.edit_message_text("⏳ Creating secure invoice...")
+        await asyncio.sleep(1.2)
+
         invoice = create_invoice(product["price"], product["name"])
         pay_url = invoice.get("invoice_url")
         order_id = invoice.get("order_id")
 
         if not pay_url:
-            await query.edit_message_text("❌ Payment error. Try later.")
+            await query.edit_message_text("❌ Payment system unavailable. Try later.")
             return
 
         db.execute(
@@ -213,15 +236,15 @@ async def menu_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db.commit()
 
         await query.edit_message_text(
-            f"💳 *Pay Now*\n\n"
-            f"{product['name']} – ${product['price']}\n\n"
+            f"💳 *Payment Ready*\n\n"
+            f"{product['name']} — ${product['price']}\n\n"
             f"👉 {pay_url}\n\n"
-            "⏳ Delivery is automatic.",
+            "⚡ Auto-delivery enabled",
             parse_mode="Markdown",
         )
 
     else:
-        await query.edit_message_text("🚧 Coming soon!")
+        await query.edit_message_text("🚧 Feature unlocking soon...")
 
 # =========================
 # MAIN
@@ -240,7 +263,7 @@ def main():
         daemon=True,
     ).start()
 
-    print("🤖 Bot is live")
+    print("🎮 Gamemode bot online")
     telegram_app.run_polling()
 
 if __name__ == "__main__":
