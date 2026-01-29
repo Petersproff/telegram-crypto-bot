@@ -48,10 +48,11 @@ PRODUCTS = {
 # =========================
 # DATABASE
 # =========================
-
 def init_db():
     conn = sqlite3.connect("orders.db", check_same_thread=False)
-    conn.execute("""
+    c = conn.cursor()
+
+    c.execute("""
         CREATE TABLE IF NOT EXISTS orders (
             order_id TEXT PRIMARY KEY,
             user_id INTEGER,
@@ -59,10 +60,62 @@ def init_db():
             status TEXT
         )
     """)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS coins (
+            user_id INTEGER PRIMARY KEY,
+            balance INTEGER DEFAULT 0
+        )
+    """)
+
     conn.commit()
     return conn
 
-db = init_db()
+
+
+async def earn(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "🪙 *EARN COINS MODE*\n\n"
+        "⚡ Task: Visit Gamemode Hub\n"
+        "🎁 Reward: +7 Coins\n\n"
+        "🌐 Open link below, complete the task,\n"
+        "then return and use /claim",
+        parse_mode="Markdown"
+    )
+
+    await update.message.reply_text(
+        "👉 https://your-vercel-link.vercel.app"
+    )
+async def claim(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+
+    row = db.execute(
+        "SELECT balance FROM coins WHERE user_id=?",
+        (user_id,)
+    ).fetchone()
+
+    if row is None:
+        db.execute(
+            "INSERT INTO coins (user_id, balance) VALUES (?, ?)",
+            (user_id, 7)
+        )
+        balance = 7
+    else:
+        balance = row[0] + 7
+        db.execute(
+            "UPDATE coins SET balance=? WHERE user_id=?",
+            (balance, user_id)
+        )
+
+    db.commit()
+
+    await update.message.reply_text(
+        "🎉 *TASK COMPLETED!*\n\n"
+        "🪙 You earned +7 coins\n"
+        f"💰 Balance: {balance} coins",
+        parse_mode="Markdown"
+    )
+
 
 # =========================
 # NOWPAYMENTS
@@ -76,7 +129,29 @@ def create_invoice(amount, description):
     }
     payload = {
         "price_amount": amount,
-        "price_currency": "usd",
+        "price_currency"def init_db():
+    conn = sqlite3.connect("orders.db", check_same_thread=False)
+    c = conn.cursor()
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS orders (
+            order_id TEXT PRIMARY KEY,
+            user_id INTEGER,
+            product TEXT,
+            status TEXT
+        )
+    """)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS coins (
+            user_id INTEGER PRIMARY KEY,
+            balance INTEGER DEFAULT 0
+        )
+    """)
+
+    conn.commit()
+    return conn
+: "usd",
         "pay_currency": "btc",
         "order_id": str(uuid.uuid4()),
         "order_description": description,
@@ -154,7 +229,6 @@ def main_menu():
             InlineKeyboardButton("🏦 Bank", callback_data="bank"),
         ],
     ])
-
 def shop_menu():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("📘 Ebook — $10", callback_data="buy_ebook")],
@@ -254,6 +328,9 @@ def main():
 
     telegram_app.add_handler(CommandHandler("start", start))
     telegram_app.add_handler(CallbackQueryHandler(menu_click))
+telegram_app.add_handler(CommandHandler("earn", earn))
+telegram_app.add_handler(CommandHandler("claim", claim))
+ 
 
     threading.Thread(
         target=lambda: app_web.run(host="0.0.0.0", port=8080),
