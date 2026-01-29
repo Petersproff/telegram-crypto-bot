@@ -129,7 +129,7 @@ def create_invoice(amount, description):
     }
     payload = {
         "price_amount": amount,
-        "price_currency"def init_db():
+        "price_currency": "usd"
     conn = sqlite3.connect("orders.db", check_same_thread=False)
     c = conn.cursor()
 
