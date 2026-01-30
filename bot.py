@@ -1,180 +1,241 @@
-import sqlite3
-import uuid
-import threading
-import requests
+import logging
+import asyncio
+from datetime import datetime
 from flask import Flask, request, jsonify
-
-from telegram import (
-    Update,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-)
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
-    ApplicationBuilder,
+    Application,
     CommandHandler,
-    CallbackQueryHandler,
     ContextTypes,
 )
+import sqlite3
+import threading
 
-# ================== CONFIG ==================
+# ================= CONFIG =================
+BOT_TOKEN = "PASTE_YOUR_BOT_TOKEN_HERE"
+ADMIN_ID = 749028646
+DB_NAME = "gamemode.db"
 
-BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
-NOWPAY_API_KEY = "YOUR_NOWPAY_API_KEY"
+# ================= LOGGING =================
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO
+)
 
-COINS_PER_TASK = 1.7
-
-# ================== DATABASE ==================
+# ================= DATABASE =================
+def db():
+    return sqlite3.connect(DB_NAME)
 
 def init_db():
-    conn = sqlite3.connect("bot.db", check_same_thread=False)
-    cur = conn.cursor()
+    con = db()
+    cur = con.cursor()
 
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            user_id INTEGER PRIMARY KEY,
-            coins REAL DEFAULT 0
-        )
+    CREATE TABLE IF NOT EXISTS products (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        price INTEGER,
+        active INTEGER DEFAULT 1
+    )
     """)
 
-    conn.commit()
-    return conn
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS downloads (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        product_id INTEGER,
+        link TEXT
+    )
+    """)
 
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS orders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        product_id INTEGER,
+        time TEXT
+    )
+    """)
 
-db = init_db()
+    con.commit()
+    con.close()
 
-# ================== FLASK (IPN / WEBHOOKS) ==================
+init_db()
 
+# ================= FLASK IPN =================
 app_web = Flask(__name__)
-
-@app_web.route("/")
-def home():
-    return "Bot is running"
 
 @app_web.route("/ipn", methods=["POST"])
 def ipn():
     data = request.json
-    print("IPN RECEIVED:", data)
-    return jsonify({"status": "ok"}), 200
+    return jsonify({"ok": True})
 
+def run_flask():
+    app_web.run(host="0.0.0.0", port=8080)
 
-# ================== PAYMENTS ==================
+# ================= UTIL =================
+def is_admin(user_id: int) -> bool:
+    return user_id == ADMIN_ID
 
-def create_invoice(amount, description):
-    url = "https://api.nowpayments.io/v1/invoice"
-    headers = {
-        "x-api-key": NOWPAY_API_KEY,
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "price_amount": amount,
-        "price_currency": "usd",
-        "pay_currency": "btc",
-        "order_id": str(uuid.uuid4()),
-        "order_description": description,
-    }
+# ================= ANIMATION =================
+async def animated_text(msg, text):
+    build = ""
+    for c in text:
+        build += c
+        await msg.edit_text(build)
+        await asyncio.sleep(0.03)
 
-    r = requests.post(url, json=payload, headers=headers, timeout=20)
-    return r.json()
-
-
-# ================== HELPERS ==================
-
-def get_user(user_id):
-    cur = db.cursor()
-    cur.execute("SELECT coins FROM users WHERE user_id = ?", (user_id,))
-    row = cur.fetchone()
-
-    if row is None:
-        cur.execute(
-            "INSERT INTO users (user_id, coins) VALUES (?, ?)",
-            (user_id, 0),
-        )
-        db.commit()
-        return 0
-
-    return row[0]
-
-
-def add_coins(user_id, amount):
-    cur = db.cursor()
-    cur.execute(
-        "UPDATE users SET coins = coins + ? WHERE user_id = ?",
-        (amount, user_id),
-    )
-    db.commit()
-
-
-# ================== BOT COMMANDS ==================
-
+# ================= COMMANDS =================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    coins = get_user(user.id)
+    msg = await update.message.reply_text("🎮")
+    await animated_text(msg, "🎮 Welcome to GAMEMODE!\n\n🔥 Play. Earn. Win.\n\nType /shop to begin.")
 
-    keyboard = [
-        [InlineKeyboardButton("💰 Earn Coins", callback_data="earn")],
-        [InlineKeyboardButton("🏦 Balance", callback_data="balance")],
-    ]
+async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "/shop – View store\n"
+        "/buy <id> – Buy product\n"
+        "/help – Help menu"
+    )
+
+async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    con = db()
+    cur = con.cursor()
+    cur.execute("SELECT id, name, price FROM products WHERE active=1")
+    rows = cur.fetchall()
+    con.close()
+
+    if not rows:
+        await update.message.reply_text("🛒 Shop is empty.")
+        return
+
+    text = "🛒 *GAMEMODE SHOP*\n\n"
+    for r in rows:
+        text += f"🆔 {r[0]} | {r[1]} — 💰 {r[2]}\n"
+
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("Usage: /buy <product_id>")
+        return
+
+    pid = context.args[0]
+
+    con = db()
+    cur = con.cursor()
+
+    cur.execute("SELECT id FROM products WHERE id=? AND active=1", (pid,))
+    product = cur.fetchone()
+
+    if not product:
+        await update.message.reply_text("❌ Product not found.")
+        con.close()
+        return
+
+    cur.execute("SELECT link FROM downloads WHERE product_id=?", (pid,))
+    links = cur.fetchall()
+
+    if not links:
+        await update.message.reply_text("⚠️ No download links yet.")
+        con.close()
+        return
+
+    cur.execute(
+        "INSERT INTO orders (user_id, product_id, time) VALUES (?, ?, ?)",
+        (update.effective_user.id, pid, datetime.utcnow().isoformat())
+    )
+
+    con.commit()
+    con.close()
+
+    reply = "✅ *Purchase Successful!*\n\n📦 Your Downloads:\n"
+    for l in links:
+        reply += f"🔗 {l[0]}\n"
+
+    await update.message.reply_text(reply, parse_mode="Markdown")
+
+# ================= ADMIN =================
+async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        return
 
     await update.message.reply_text(
-        f"👋 Welcome {user.first_name}!\n\n"
-        f"💰 Coins: {coins:.2f}\n\n"
-        "Choose an option:",
-        reply_markup=InlineKeyboardMarkup(keyboard),
+        "🔐 *ADMIN PANEL*\n\n"
+        "/addproduct <name>|<price>\n"
+        "/addlink <product_id>|<url>\n"
+        "/products",
+        parse_mode="Markdown"
     )
 
+async def addproduct(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        return
 
-async def earn(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
+    data = " ".join(context.args)
+    if "|" not in data:
+        await update.message.reply_text("Format: /addproduct Name|Price")
+        return
 
-    add_coins(query.from_user.id, COINS_PER_TASK)
-    coins = get_user(query.from_user.id)
+    name, price = data.split("|")
+    con = db()
+    cur = con.cursor()
+    cur.execute("INSERT INTO products (name, price) VALUES (?, ?)", (name, price))
+    con.commit()
+    con.close()
 
-    await query.edit_message_text(
-        f"✅ Task completed!\n\n"
-        f"➕ You earned {COINS_PER_TASK} coins\n"
-        f"💰 Total: {coins:.2f}"
-    )
+    await update.message.reply_text("✅ Product added.")
 
+async def addlink(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        return
 
-async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
+    data = " ".join(context.args)
+    if "|" not in data:
+        await update.message.reply_text("Format: /addlink ProductID|URL")
+        return
 
-    coins = get_user(query.from_user.id)
+    pid, url = data.split("|")
+    con = db()
+    cur = con.cursor()
+    cur.execute("INSERT INTO downloads (product_id, link) VALUES (?, ?)", (pid, url))
+    con.commit()
+    con.close()
 
-    await query.edit_message_text(
-        f"🏦 Your balance:\n\n"
-        f"💰 {coins:.2f} coins"
-    )
+    await update.message.reply_text("🔗 Link added.")
 
+async def products(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        return
 
-async def menu_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
+    con = db()
+    cur = con.cursor()
+    cur.execute("SELECT id, name, price FROM products")
+    rows = cur.fetchall()
+    con.close()
 
-    if query.data == "earn":
-        await earn(update, context)
+    text = "📦 *ALL PRODUCTS*\n\n"
+    for r in rows:
+        text += f"{r[0]} | {r[1]} — {r[2]}\n"
 
-    elif query.data == "balance":
-        await balance(update, context)
+    await update.message.reply_text(text, parse_mode="Markdown")
 
-
-# ================== MAIN ==================
-
+# ================= MAIN =================
 def main():
-    telegram_app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app = Application.builder().token(BOT_TOKEN).build()
 
-    telegram_app.add_handler(CommandHandler("start", start))
-    telegram_app.add_handler(CallbackQueryHandler(menu_click))
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_cmd))
+    app.add_handler(CommandHandler("shop", shop))
+    app.add_handler(CommandHandler("buy", buy))
 
-    threading.Thread(
-        target=lambda: app_web.run(host="0.0.0.0", port=8080),
-        daemon=True,
-    ).start()
+    app.add_handler(CommandHandler("admin", admin))
+    app.add_handler(CommandHandler("addproduct", addproduct))
+    app.add_handler(CommandHandler("addlink", addlink))
+    app.add_handler(CommandHandler("products", products))
 
-    print("🤖 Bot is online")
-    telegram_app.run_polling()
+    threading.Thread(target=run_flask, daemon=True).start()
 
+    print("🤖 Bot is live")
+    app.run_polling()
 
 if __name__ == "__main__":
     main()
